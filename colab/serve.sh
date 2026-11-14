@@ -5,19 +5,26 @@ set -euo pipefail
 SRC=${SRC:-/content/basalt}
 PACK=${PACK:-/mnt/models/DeepSeek-V4.1-Flash-1017-UD-IQ1_M.basalt}
 PORT=${PORT:-8090}  # Colab itself listens on 8080
-CONTEXT=${CONTEXT:-32768}
+CONTEXT=${CONTEXT:-262144}  # Qwen3.8 Flash-Next native length; DeepSeek takes up to 1,048,576
+KV=${KV:-}                  # empty = engine default (Flash-Next fp16, DeepSeek fp8); Flash-Next also int8 / q4_0 / k8v4
 KEYFILE=/content/basalt_api_key.txt
 [ -f "$PACK" ] || { echo "no pack at $PACK: wait for download.sh" >&2; exit 1; }
 [ -x "$SRC/bin/basalt" ] || { echo "no $SRC/bin/basalt: wait for build.sh" >&2; exit 1; }
 [ -s "$KEYFILE" ] || python3 -c "import secrets; print(secrets.token_urlsafe(24))" > "$KEYFILE"
+KV_JSON=""; [ -n "$KV" ] && KV_JSON=", \"kv\": \"$KV\""
 cat > /content/basalt_config.json <<EOF
 {
   "version": 2,
   "models": [{ "model": "$PACK", "gpu": "0" }],
-  "engine": { "max-context": $CONTEXT },
+  "engine": { "max-context": $CONTEXT$KV_JSON },
   "server": { "port": $PORT, "allowed-host": ["*"] }
 }
 EOF
+# a restart (new context or KV): stop the running server first and wait for it to free the GPU
+if pkill -f "[s]erve.server --engine-bin"; then
+  for _ in $(seq 60); do pgrep -f "[b]in/basalt --serve" > /dev/null || break; sleep 1; done
+  echo "stopped the running server"
+fi
 cd "$SRC"
 setsid nohup bin/basalt serve --config /content/basalt_config.json --api-key "$(cat "$KEYFILE")" \
   > /content/basalt-server.log 2>&1 < /dev/null &
