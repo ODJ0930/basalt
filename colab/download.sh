@@ -9,7 +9,10 @@ PACK=${PACK:-DeepSeek-V4.1-Flash-1017-UD-IQ1_M.basalt}
 INCLUDE=${INCLUDE:-}
 MNT=${MNT:-/mnt/models}
 TRIES=${TRIES:-30}
-mountpoint -q "$MNT" || { echo "$MNT is not mounted: run storage.sh first" >&2; exit 1; }
+if [ "${MNT#/mnt/}" != "$MNT" ]; then   # a volume made by storage.sh or a tmpfs: it must be mounted
+  mountpoint -q "$MNT" || { echo "$MNT is not mounted: run storage.sh first" >&2; exit 1; }
+fi
+mkdir -p "$MNT"
 pip install -q -U "huggingface_hub[hf_xet]"
 # no chunk cache on the small VM disk, and the download's temp file stays on the same volume
 export HF_XET_CHUNK_CACHE_SIZE_BYTES=0
