@@ -13,6 +13,7 @@ for _ in $(seq 60); do
 done
 [ -n "${URL:-}" ] || { echo "no tunnel URL; see /content/cloudflared.log" >&2; exit 1; }
 echo "$URL" > /content/basalt_public_url.txt
+echo "Web panel:        $URL/   (enter the API key in the top bar)"
 echo "OpenAI base URL:  $URL/v1"
 echo "Anthropic URL:    $URL/v1/messages"
 echo "API key:          $(cat /content/basalt_api_key.txt)"
