@@ -4,7 +4,7 @@
 set -euo pipefail
 SRC=${SRC:-/content/basalt}
 PACK=${PACK:-/mnt/models/DeepSeek-V4.1-Flash-1017-UD-IQ1_M.basalt}
-PORT=${PORT:-8080}
+PORT=${PORT:-8090}  # Colab itself listens on 8080
 CONTEXT=${CONTEXT:-32768}
 KEYFILE=/content/basalt_api_key.txt
 [ -f "$PACK" ] || { echo "no pack at $PACK: wait for download.sh" >&2; exit 1; }

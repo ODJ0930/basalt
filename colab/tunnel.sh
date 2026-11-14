@@ -1,7 +1,7 @@
 #!/bin/bash
 # A Cloudflare quick tunnel to the basalt server; prints the public URL and the API key.
 set -euo pipefail
-PORT=${PORT:-8080}
+PORT=${PORT:-8090}  # Colab itself listens on 8080
 [ -x /content/cloudflared ] || { wget -q -O /content/cloudflared \
   https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64; chmod +x /content/cloudflared; }
 pkill -f "cloudflared tunnel" 2>/dev/null || true
