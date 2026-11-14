@@ -13,7 +13,8 @@ if [ "${MNT#/mnt/}" != "$MNT" ]; then   # a volume made by storage.sh or a tmpfs
   mountpoint -q "$MNT" || { echo "$MNT is not mounted: run storage.sh first" >&2; exit 1; }
 fi
 mkdir -p "$MNT"
-pip install -q -U "huggingface_hub[hf_xet]"
+# parallel downloads share one pip lock: two concurrent upgrades leave huggingface_hub half-installed
+flock /tmp/basalt-pip.lock pip install -q -U "huggingface_hub[hf_xet]"
 # no chunk cache on the small VM disk, and the download's temp file stays on the same volume
 export HF_XET_CHUNK_CACHE_SIZE_BYTES=0
 export HF_HOME=$MNT/.hf

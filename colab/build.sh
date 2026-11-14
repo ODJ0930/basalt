@@ -4,7 +4,7 @@ set -euo pipefail
 SRC=${SRC:-/content/basalt}
 MODELS=${MODELS:-deepseek41}   # qwen4exp, deepseek41, or "qwen4exp;deepseek41"
 cd "$SRC"
-pip install -q -r requirements.txt "cmake>=3.24" ninja
+flock /tmp/basalt-pip.lock pip install -q -r requirements.txt "cmake>=3.24" ninja
 cmake --version | head -1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DBASALT_MODELS=$MODELS" \
   -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
