@@ -75,4 +75,7 @@ try:
             print(f"{now()} server {server}, tunnel {tunnel}", flush=True)
         time.sleep(60)
 except KeyboardInterrupt:
-    print(f"\n{now()} keepalive stopped (the server and tunnel keep running)")
+    try:   # Colab's stop button may interrupt twice
+        print("\nkeepalive stopped (the server and tunnel keep running)", flush=True)
+    except KeyboardInterrupt:
+        pass
