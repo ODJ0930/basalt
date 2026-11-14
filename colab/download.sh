@@ -13,7 +13,7 @@ pip install -q -U "huggingface_hub[hf_xet]"
 export HF_XET_CHUNK_CACHE_SIZE_BYTES=0
 export HF_HOME=$MNT/.hf
 if [ -z "${HF_TOKEN:-}" ] && [ -s /content/hf_token ]; then HF_TOKEN=$(cat /content/hf_token); export HF_TOKEN; fi
-echo "token: $([ -n "${HF_TOKEN:-}" ] && echo yes || echo no (anonymous))"
+if [ -n "${HF_TOKEN:-}" ]; then echo "token: yes"; else echo "token: no (anonymous)"; fi
 for i in $(seq "$TRIES"); do
   date
   if hf download "$REPO" "$PACK" --local-dir "$MNT"; then
