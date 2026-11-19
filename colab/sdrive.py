@@ -21,7 +21,7 @@ POST /api/rename 改名、GET /api/stats 空间。
   sdrive.py rm 逻辑路径 [--prefix]             # --prefix：删掉这个前缀下的全部文件
   sdrive.py mv 旧逻辑路径 新逻辑路径 [--overwrite]
   sdrive.py sync-up 本地目录 逻辑前缀 [--match 正则] [--min-age 秒] [--watch 秒] [--overwrite]
-  sdrive.py sync-down 逻辑前缀 本地目录 [--match 正则]
+  sdrive.py sync-down 逻辑前缀 本地目录 [--match 正则] [--force]
   sdrive.py stats
 """
 from __future__ import annotations
@@ -76,15 +76,28 @@ def config() -> tuple[str, str]:
     return _cfg["url"], _cfg["key"]
 
 
+def _enc_seg(seg: str) -> str:
+    """一段路径里的 "__"、开头或结尾的 "_" 会和分隔符 "__" 混淆：这类段把 "_" 写成 %5F（"%" 一律写成 %25）。
+    普通的段原样不变，所以老文件名不受影响。"""
+    seg = seg.replace("%", "%25")
+    if "__" in seg or seg.startswith("_") or seg.endswith("_"):
+        seg = seg.replace("_", "%5F")
+    return seg
+
+
+def _dec_seg(seg: str) -> str:
+    return re.sub(r"%(25|5F)", lambda m: "%" if m.group(1) == "25" else "_", seg)
+
+
 def flat_name(path: str) -> str:
     path = path.strip("/")
     if not path or any(s in ("", ".", "..") for s in path.split("/")):
         raise ValueError(f"路径不对：{path!r}")
-    return "__".join(path.split("/"))
+    return "__".join(_enc_seg(s) for s in path.split("/"))
 
 
 def logical(name: str) -> str:
-    return "/".join(name.split("__"))
+    return "/".join(_dec_seg(s) for s in name.split("__"))
 
 
 def _url(kind: str, name: str = "", query: dict | None = None) -> str:
@@ -367,7 +380,7 @@ def download(name: str, dst: str, size: int | None = None) -> None:
 
 def catalog(prefix: str = "") -> dict[str, dict]:
     """逻辑路径 -> {path, name, size, mtime, etag[, parts, part_size]}；分块文件合成一条。"""
-    pre = flat_name(prefix) if prefix.strip("/") else ""
+    pre = flat_name(prefix) if prefix.strip("/") else ""  # 前缀按完整路径段转义（调用方都传完整的目录前缀）
     files = list_names(pre)
     cat: dict[str, dict] = {}
     groups: dict[str, list] = {}
@@ -430,14 +443,19 @@ def put(local: str, path: str, cat: dict | None = None, overwrite: bool = False,
     return e
 
 
-def get(path: str, dst: str, cat: dict | None = None, verify: bool = False) -> None:
+def get(path: str, dst: str, cat: dict | None = None, verify: bool = False, force: bool = False) -> None:
+    """下载到 dst；本地已有同大小的跳过（force=True 时照样重下）。"""
     path = path.strip("/")
     cat = catalog(path) if cat is None else cat
     e = cat.get(path)
     if not e:
         raise FileNotFoundError(f"网盘上没有 {path}")
-    if os.path.exists(dst) and os.path.getsize(dst) == e["size"]:
+    if os.path.exists(dst) and os.path.getsize(dst) == e["size"] and not force:
         return
+    if force:
+        for f in (dst + ".part", dst + ".part.done"):
+            if os.path.exists(f):
+                os.remove(f)
     if e.get("parts"):
         download_parts(e, dst)
     else:
@@ -497,7 +515,7 @@ def sync_up(src: str, prefix: str, match: str | None = None, min_age: float = 0,
     return n
 
 
-def sync_down(prefix: str, dst: str, match: str | None = None) -> int:
+def sync_down(prefix: str, dst: str, match: str | None = None, force: bool = False) -> int:
     rx = re.compile(match) if match else None
     prefix = prefix.strip("/")
     n = 0
@@ -508,10 +526,11 @@ def sync_down(prefix: str, dst: str, match: str | None = None) -> int:
         if rx and not rx.search(rel):
             continue
         out = os.path.join(dst, rel or os.path.basename(path))
-        if os.path.exists(out) and os.path.getsize(out) == e["size"]:
+        if os.path.exists(out) and os.path.getsize(out) == e["size"] and not force:
             continue
-        log(f"下载 {path}（{e['size'] / 2**20:.1f} MB）")
-        get(path, out, {path: e})
+        if e["size"] > 1 << 20:
+            log(f"下载 {path}（{e['size'] / 2**20:.1f} MB）")
+        get(path, out, {path: e}, force=force)
         n += 1
     return n
 
@@ -529,6 +548,7 @@ def main() -> None:
     s.add_argument("--match"); s.add_argument("--min-age", type=float, default=0); s.add_argument("--watch", type=float, default=0)
     s.add_argument("--overwrite", action="store_true")
     s = sub.add_parser("sync-down"); s.add_argument("prefix"); s.add_argument("dst"); s.add_argument("--match")
+    s.add_argument("--force", action="store_true")
     sub.add_parser("stats")
     a = ap.parse_args()
     try:
@@ -568,7 +588,7 @@ def main() -> None:
                     break
                 time.sleep(a.watch)
         elif a.cmd == "sync-down":
-            log(f"sync-down {a.prefix} → {a.dst}：下载 {sync_down(a.prefix, a.dst, a.match)} 个")
+            log(f"sync-down {a.prefix} → {a.dst}：下载 {sync_down(a.prefix, a.dst, a.match, a.force)} 个")
     except (DriveError, ValueError, FileNotFoundError, FileExistsError) as e:
         sys.exit(f"失败：{e}")
 
